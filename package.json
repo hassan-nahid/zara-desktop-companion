@@ -1,0 +1,42 @@
+{
+  "name": "ai-zara",
+  "version": "1.0.0",
+  "description": "Zara - AI Desktop Companion",
+  "main": "electron/main.js",
+  "author": "Nahid",
+  "license": "ISC",
+  "scripts": {
+    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "build": "vite build && electron-builder",
+    "vite": "vite",
+    "electron": "electron ."
+  },
+  "type": "module",
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.0.1",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^42.0.1",
+    "electron-builder": "^26.8.1",
+    "vite": "^8.0.12",
+    "wait-on": "^8.0.5"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@pixiv/three-vrm": "^3.5.2",
+    "better-sqlite3": "^12.10.0",
+    "dotenv": "^17.4.2",
+    "elevenlabs": "^1.59.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "three": "^0.184.0",
+    "zustand": "^5.0.13"
+  },
+  "build": {
+    "appId": "com.nahid.ai-zara",
+    "productName": "Zara",
+    "win": {
+      "target": "nsis"
+    }
+  }
+}

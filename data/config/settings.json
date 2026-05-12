@@ -1,0 +1,27 @@
+{
+  "version": "1.0.0",
+  "character": {
+    "defaultName": "Zara",
+    "emotionDuration": 3000,
+    "emotionTransitionSpeed": 0.1
+  },
+  "ai": {
+    "provider": "gemini",
+    "defaultModel": "gemini-2.0-flash",
+    "maxHistory": 50,
+    "temperature": 0.9,
+    "geminiApiKey": "AIzaSyB89IwJn67A0nBUMjusDgQ0gzYHFRtNBV4"
+  },
+  "voice": {
+    "provider": "elevenlabs",
+    "stability": 0.5,
+    "similarityBoost": 0.75,
+    "style": 0.3,
+    "useSpeakerBoost": true
+  },
+  "window": {
+    "defaultWidth": 300,
+    "defaultHeight": 500,
+    "position": "bottom-right"
+  }
+}
