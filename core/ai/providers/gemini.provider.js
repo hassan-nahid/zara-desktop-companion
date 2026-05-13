@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { AIProvider } from "./AIProvider.js";
+import { buildSystemPrompt } from "../promptBuilder.js";
 
 export class GeminiProvider extends AIProvider {
   constructor(apiKey, modelName = "gemini-2.0-flash") {
@@ -17,8 +18,8 @@ export class GeminiProvider extends AIProvider {
     const result = await this.model.generateContent({
       contents,
       generationConfig: {
-        temperature: context.temperature || 0.9,
-        maxOutputTokens: context.maxTokens || 2048,
+        temperature: context.temperature || 0.95,
+        maxOutputTokens: context.maxTokens || 500,
       },
     });
 
@@ -31,31 +32,15 @@ export class GeminiProvider extends AIProvider {
     };
   }
 
-  async generateResponse(userMessage, conversationHistory, personality) {
-    const systemPrompt = this.buildSystemPrompt(personality);
+  async generateResponse(userMessage, conversationHistory, personality, moodContext = {}) {
+    const systemPrompt = buildSystemPrompt(personality, moodContext);
     const messages = [
       { role: "user", content: systemPrompt },
+      { role: "model", content: `বুঝেছি! আমি ${personality.name || "Zara"}। আমি আমার মেজাজ (${moodContext.mood || "happy"}) অনুযায়ী কথা বলবো। 😊` },
       ...conversationHistory,
       { role: "user", content: userMessage },
     ];
 
-    return this.chat(messages, { temperature: personality.temperature || 0.9 });
-  }
-
-  buildSystemPrompt(personality) {
-    return `${personality.system || `You are ${personality.name || "Zara"}, a friendly AI companion.`}
-
-Your traits:
-- Personality: ${personality.traits || "warm, caring, playful"}
-- Language: Primarily Bangla with some English
-- Communication style: ${personality.style || "conversational, casual"}
-
-When expressing emotions in your response, include [EMOTION: emotion_name] tag.
-Available emotions: happy, angry, sad, shy, surprised, excited, neutral
-
-Example responses:
-- "আমি তোমার সাথে কথা বলতে পেরে খুব খুশি হয়েছি! [EMOTION: happy]"
-- "হুম, আমি একটু রাগি মেজাজে আছি আজকে। [EMOTION: angry]"
-`;
+    return this.chat(messages, { temperature: personality.temperature || 0.95 });
   }
 }

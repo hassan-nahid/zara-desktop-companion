@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useSettingsStore } from "../../stores/settingsStore";
+import { useRelationshipStore, MOODS } from "../../stores/relationshipStore";
 
 const SettingsPanel = ({ isOpen, onClose }) => {
   const settings = useSettingsStore();
+  const { mood, loveMeter, angerMeter, resetMood } = useRelationshipStore();
   const [activeTab, setActiveTab] = useState("ai");
 
   if (!isOpen) return null;
@@ -10,71 +12,89 @@ const SettingsPanel = ({ isOpen, onClose }) => {
   return (
     <div
       style={{
-        position: "absolute",
-        top: 0,
-        right: 0,
-        width: "280px",
-        height: "100%",
-        background: "rgba(20, 20, 30, 0.95)",
-        backdropFilter: "blur(10px)",
-        borderLeft: "1px solid rgba(255, 255, 255, 0.1)",
-        zIndex: 200,
+        width: "340px",
+        maxHeight: "500px",
+        background: "rgba(15, 15, 30, 0.97)",
+        backdropFilter: "blur(20px)",
+        borderRadius: "16px",
+        border: "1px solid rgba(167, 139, 250, 0.2)",
+        boxShadow: "0 8px 40px rgba(0, 0, 0, 0.6), 0 0 30px rgba(167, 139, 250, 0.1)",
         display: "flex",
         flexDirection: "column",
+        overflow: "hidden",
+        animation: "slideIn 0.3s ease-out",
       }}
     >
+      {/* Header */}
       <div
         style={{
-          padding: "16px",
-          borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
+          padding: "16px 20px",
+          borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
         }}
       >
         <span style={{ color: "#fff", fontSize: "16px", fontWeight: "600" }}>
-          Settings
+          ⚙️ Settings
         </span>
         <button
           onClick={onClose}
           style={{
-            background: "transparent",
+            background: "rgba(255,255,255,0.08)",
             border: "none",
             color: "#888",
-            fontSize: "20px",
+            fontSize: "16px",
             cursor: "pointer",
+            width: "28px",
+            height: "28px",
+            borderRadius: "8px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
           }}
         >
-          ×
+          ✕
         </button>
       </div>
 
-      <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-        {["ai", "voice", "character"].map((tab) => (
+      {/* Tabs */}
+      <div
+        style={{
+          display: "flex",
+          borderBottom: "1px solid rgba(255,255,255,0.08)",
+        }}
+      >
+        {["ai", "voice", "mood"].map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
             style={{
               flex: 1,
               padding: "12px",
-              background: activeTab === tab ? "rgba(167, 139, 250, 0.2)" : "transparent",
+              background:
+                activeTab === tab ? "rgba(167, 139, 250, 0.15)" : "transparent",
               border: "none",
-              color: activeTab === tab ? "#a78bfa" : "#888",
+              borderBottom: activeTab === tab ? "2px solid #a78bfa" : "2px solid transparent",
+              color: activeTab === tab ? "#a78bfa" : "#666",
               fontSize: "12px",
+              fontWeight: activeTab === tab ? "600" : "400",
               textTransform: "capitalize",
               cursor: "pointer",
+              transition: "all 0.2s",
             }}
           >
-            {tab}
+            {tab === "ai" ? "🤖 AI" : tab === "voice" ? "🔊 Voice" : "💜 Mood"}
           </button>
         ))}
       </div>
 
-      <div style={{ padding: "16px", overflowY: "auto", flex: 1 }}>
+      {/* Content */}
+      <div style={{ padding: "16px 20px", overflowY: "auto", flex: 1 }}>
         {activeTab === "ai" && (
           <SettingsForm>
             <SettingInput
-              label="API Key"
+              label="Gemini API Key"
               type="password"
               value={settings.geminiApiKey}
               onChange={settings.setGeminiApiKey}
@@ -108,8 +128,8 @@ const SettingsPanel = ({ isOpen, onClose }) => {
               value={settings.voiceProvider}
               onChange={settings.setVoiceProvider}
               options={[
-                { value: "webspeech", label: "Browser (Free - Bengali support limited)" },
-                { value: "elevenlabs", label: "ElevenLabs (Premium - Better quality)" },
+                { value: "webspeech", label: "Browser (Free)" },
+                { value: "elevenlabs", label: "ElevenLabs (Premium)" },
               ]}
             />
             {settings.voiceProvider === "elevenlabs" && (
@@ -129,47 +149,54 @@ const SettingsPanel = ({ isOpen, onClose }) => {
                 />
               </>
             )}
-            <SettingSlider
-              label="Stability"
-              value={settings.stability}
-              onChange={settings.setStability}
-              min={0}
-              max={1}
-              step={0.05}
-            />
-            <SettingSlider
-              label="Similarity Boost"
-              value={settings.similarityBoost}
-              onChange={settings.setSimilarityBoost}
-              min={0}
-              max={1}
-              step={0.05}
-            />
           </SettingsForm>
         )}
 
-        {activeTab === "character" && (
+        {activeTab === "mood" && (
           <SettingsForm>
-            <SettingInput
-              label="Character Name"
-              value={settings.characterName}
-              onChange={settings.setCharacterName}
-              placeholder="Zara"
-            />
-            <SettingSlider
-              label="Emotion Duration (ms)"
-              value={settings.emotionDuration}
-              onChange={settings.setEmotionDuration}
-              min={1000}
-              max={10000}
-              step={500}
-            />
+            {/* Mood Status */}
+            <div
+              style={{
+                background: "rgba(167, 139, 250, 0.1)",
+                borderRadius: "12px",
+                padding: "16px",
+              }}
+            >
+              <div style={{ color: "#a78bfa", fontSize: "13px", fontWeight: "600", marginBottom: "12px" }}>
+                Current Mood Status
+              </div>
+              <MoodBar label="Mood" value={mood} />
+              <MoodMeter label="Love ❤️" value={loveMeter} color="#f472b6" />
+              <MoodMeter label="Anger 💢" value={angerMeter} color="#f87171" />
+            </div>
+
+            <button
+              onClick={() => {
+                resetMood();
+              }}
+              style={{
+                width: "100%",
+                padding: "12px",
+                background: "linear-gradient(135deg, #a78bfa, #f472b6)",
+                border: "none",
+                borderRadius: "10px",
+                color: "#fff",
+                fontSize: "13px",
+                fontWeight: "600",
+                cursor: "pointer",
+                marginTop: "8px",
+              }}
+            >
+              🔄 Reset Mood
+            </button>
           </SettingsForm>
         )}
       </div>
     </div>
   );
 };
+
+// --- Sub-components ---
 
 const SettingsForm = ({ children }) => (
   <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -189,13 +216,14 @@ const SettingInput = ({ label, value, onChange, placeholder, type = "text" }) =>
       placeholder={placeholder}
       style={{
         width: "100%",
-        padding: "10px 12px",
+        padding: "10px 14px",
         background: "rgba(255, 255, 255, 0.05)",
         border: "1px solid rgba(255, 255, 255, 0.1)",
-        borderRadius: "8px",
+        borderRadius: "10px",
         color: "#fff",
-        fontSize: "14px",
+        fontSize: "13px",
         outline: "none",
+        transition: "border-color 0.2s",
       }}
     />
   </div>
@@ -211,12 +239,12 @@ const SettingSelect = ({ label, value, onChange, options }) => (
       onChange={(e) => onChange(e.target.value)}
       style={{
         width: "100%",
-        padding: "10px 12px",
+        padding: "10px 14px",
         background: "rgba(255, 255, 255, 0.05)",
         border: "1px solid rgba(255, 255, 255, 0.1)",
-        borderRadius: "8px",
+        borderRadius: "10px",
         color: "#fff",
-        fontSize: "14px",
+        fontSize: "13px",
         outline: "none",
       }}
     >
@@ -232,7 +260,7 @@ const SettingSelect = ({ label, value, onChange, options }) => (
 const SettingSlider = ({ label, value, onChange, min, max, step }) => (
   <div>
     <label style={{ color: "#888", fontSize: "12px", display: "block", marginBottom: "6px" }}>
-      {label}: {value.toFixed(2)}
+      {label}: {typeof value === "number" ? value.toFixed(2) : value}
     </label>
     <input
       type="range"
@@ -241,8 +269,56 @@ const SettingSlider = ({ label, value, onChange, min, max, step }) => (
       step={step}
       value={value}
       onChange={(e) => onChange(parseFloat(e.target.value))}
-      style={{ width: "100%" }}
+      style={{ width: "100%", accentColor: "#a78bfa" }}
     />
+  </div>
+);
+
+const MoodBar = ({ label, value }) => {
+  const moodEmojis = {
+    love: "💕 Love",
+    happy: "😊 Happy",
+    neutral: "😐 Neutral",
+    irritated: "😒 Irritated",
+    angry: "😠 Angry",
+    fighting: "💢 Fighting!",
+    forgiving: "🥺 Forgiving",
+  };
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+      <span style={{ color: "#ccc", fontSize: "12px" }}>{label}</span>
+      <span style={{ color: "#fff", fontSize: "12px", fontWeight: "600" }}>
+        {moodEmojis[value] || value}
+      </span>
+    </div>
+  );
+};
+
+const MoodMeter = ({ label, value, color }) => (
+  <div style={{ marginBottom: "8px" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+      <span style={{ color: "#ccc", fontSize: "11px" }}>{label}</span>
+      <span style={{ color: color, fontSize: "11px", fontWeight: "600" }}>{value}%</span>
+    </div>
+    <div
+      style={{
+        width: "100%",
+        height: "4px",
+        background: "rgba(255,255,255,0.1)",
+        borderRadius: "4px",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          width: `${value}%`,
+          height: "100%",
+          background: `linear-gradient(90deg, ${color}80, ${color})`,
+          borderRadius: "4px",
+          transition: "width 0.5s ease",
+        }}
+      />
+    </div>
   </div>
 );
 

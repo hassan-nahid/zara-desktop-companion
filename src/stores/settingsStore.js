@@ -1,8 +1,20 @@
 import { create } from "zustand";
 
+// Load settings from config file
+const loadConfig = () => {
+  try {
+    // This will be loaded via fetch in the app
+    return {
+      geminiApiKey: "",
+    };
+  } catch {
+    return { geminiApiKey: "" };
+  }
+};
+
 const DEFAULT_SETTINGS = {
   // AI Settings
-  geminiApiKey: "",
+  geminiApiKey: import.meta.env.Gemini_API || "",
   modelName: "gemini-2.0-flash",
   temperature: 0.9,
 
@@ -20,6 +32,20 @@ const DEFAULT_SETTINGS = {
 
 export const useSettingsStore = create((set) => ({
   ...DEFAULT_SETTINGS,
+
+  // Load API key from settings file
+  loadApiKey: () => {
+    fetch("/models/settings.json")
+      .then((res) => res.json())
+      .then((config) => {
+        if (config.ai?.geminiApiKey) {
+          set({ geminiApiKey: config.ai.geminiApiKey });
+        }
+      })
+      .catch(() => {
+        // Config not found, use default
+      });
+  },
 
   // Actions
   setGeminiApiKey: (key) => set({ geminiApiKey: key }),

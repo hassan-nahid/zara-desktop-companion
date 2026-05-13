@@ -1,7 +1,8 @@
 import { useCallback, useRef } from "react";
 import { useConversationStore } from "../stores/conversationStore";
-import { useCharacterStore } from "../stores/characterStore";
+import { useCharacterStore, SPRITE_STATES } from "../stores/characterStore";
 import { useSettingsStore } from "../stores/settingsStore";
+import { useRelationshipStore } from "../stores/relationshipStore";
 import { createAI, EmotionParser } from "../../core/ai/emotionParser.js";
 import { buildSystemPrompt, buildConversationContext, DEFAULT_PERSONALITY } from "../../core/ai/promptBuilder.js";
 
@@ -14,11 +15,10 @@ export const useAI = () => {
     addMessage,
     setCurrentMessage,
     setTyping,
-    setSpeaking,
     characterName,
   } = useConversationStore();
 
-  const { setEmotion } = useCharacterStore();
+  const { setEmotion, setSprite } = useCharacterStore();
   const { geminiApiKey, modelName, temperature, characterName: settingsName } = useSettingsStore();
 
   // Initialize provider
@@ -41,17 +41,38 @@ export const useAI = () => {
 
   // Send message and get response
   const sendMessage = useCallback(async (userMessage) => {
+    const relStore = useRelationshipStore.getState();
+    const parser = emotionParserRef.current;
+
+    // Record interaction
+    relStore.recordInteraction();
+
+    // Check if message is rude or sweet and update relationship
+    if (parser.isRudeMessage(userMessage)) {
+      relStore.processRudeMessage();
+    } else if (parser.isSweetMessage(userMessage)) {
+      relStore.processSweetMessage();
+    }
+
     addMessage("user", userMessage);
     setTyping(true);
 
     const provider = initProvider();
     if (!provider) {
       setTyping(false);
-      setCurrentMessage("API key not configured");
+      setCurrentMessage("API key দাও আগে! ⚙️ Settings এ যাও~");
       return;
     }
 
     try {
+      // Get current mood context for prompt
+      const moodContext = {
+        mood: relStore.mood,
+        loveMeter: relStore.loveMeter,
+        angerMeter: relStore.angerMeter,
+        ignoreMinutes: relStore.ignoreMinutes,
+      };
+
       const personality = {
         ...DEFAULT_PERSONALITY,
         name: characterName || settingsName,
@@ -62,29 +83,52 @@ export const useAI = () => {
       const response = await provider.generateResponse(
         userMessage,
         history,
-        personality
+        personality,
+        moodContext
       );
 
-      // Parse emotion from response
-      const { emotion, text } = emotionParserRef.current.parse(response.text);
+      // Parse emotion and actions from response
+      const { emotion, actions, text } = parser.parse(response.text);
 
       addMessage("model", text);
       setCurrentMessage(text);
       setTyping(false);
 
-      // Trigger emotion
+      // Apply emotion
       if (emotion) {
         setEmotion(emotion);
       }
 
-      return { text, emotion };
+      // Apply actions
+      if (actions && actions.length > 0) {
+        for (const action of actions) {
+          switch (action) {
+            case "turn_away":
+              setSprite(SPRITE_STATES.ANGRY);
+              useCharacterStore.getState().setFacing(false);
+              break;
+            case "come_closer":
+              setSprite(SPRITE_STATES.LOVE);
+              break;
+            case "walk_away":
+              // This will be handled by the behavior system
+              setSprite(SPRITE_STATES.ANGRY);
+              break;
+            case "bounce":
+              setSprite(SPRITE_STATES.HAPPY);
+              break;
+          }
+        }
+      }
+
+      return { text, emotion, actions };
     } catch (error) {
       console.error("AI Error:", error);
       setTyping(false);
-      setCurrentMessage("Error: Could not get response");
+      setCurrentMessage("উফ, কিছু একটা ভুল হয়ে গেছে... 😅");
       return { error: error.message };
     }
-  }, [messages, characterName, settingsName, temperature, initProvider, addMessage, setCurrentMessage, setTyping, setEmotion]);
+  }, [messages, characterName, settingsName, temperature, initProvider, addMessage, setCurrentMessage, setTyping, setEmotion, setSprite]);
 
   // Reset conversation
   const reset = useCallback(() => {

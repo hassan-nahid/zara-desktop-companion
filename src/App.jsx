@@ -1,62 +1,117 @@
-import { useEffect, useRef } from "react";
-import CharacterRenderer from "./components/Character/CharacterRenderer";
+import { useEffect, useState } from "react";
+import VRMCharacter from "./components/Character/VRMCharacter";
 import ChatBubble from "./components/ChatBubble/ChatBubble";
-import SubtitleBar from "./components/ChatBubble/SubtitleBar";
+import EmotionIndicator from "./components/UI/EmotionIndicator";
+import SettingsPanel from "./components/UI/SettingsPanel";
 import { useCharacterStore } from "./stores/characterStore";
+import { useRelationshipStore } from "./stores/relationshipStore";
+import { useConversationStore } from "./stores/conversationStore";
+import { useSettingsStore } from "./stores/settingsStore";
+import { useScreenInfo } from "./hooks/useScreenInfo";
+import { useDesktopBehavior } from "./hooks/useDesktopBehavior";
+import { useAutoTalk } from "./hooks/useAutoTalk";
+import { useAI } from "./hooks/useAI";
 
 const App = () => {
-  const containerRef = useRef(null);
-  const { currentEmotion } = useCharacterStore();
+  const [showSettings, setShowSettings] = useState(false);
 
+  const { geminiApiKey, loadApiKey } = useSettingsStore();
+  const { initProvider } = useAI();
+  const { screenWidth, groundY, taskbarHeight } = useScreenInfo();
+
+  // Initialize desktop behavior (idle, sitting)
+  useDesktopBehavior(screenWidth, groundY, taskbarHeight);
+
+  // Initialize auto-talk
+  useAutoTalk();
+
+  // Load API key on mount
+  useEffect(() => { loadApiKey(); }, []);
+
+  // Initialize AI when API key is available
   useEffect(() => {
-    window.electronAPI?.setIgnoreMouse(false);
+    if (geminiApiKey) initProvider();
+  }, [geminiApiKey]);
+
+  // Listen for tray menu events
+  useEffect(() => {
+    if (window.electronAPI) {
+      window.electronAPI.onResetMood(() => {
+        useRelationshipStore.getState().resetMood();
+        useCharacterStore.getState().resetState();
+        useConversationStore.getState().setCurrentMessage("আবার শুরু! 💕 সব ভুলে গেছি!");
+      });
+      window.electronAPI.onOpenSettings(() => setShowSettings(true));
+    }
+    return () => {
+      if (window.electronAPI) {
+        window.electronAPI.removeAllListeners("reset-mood");
+        window.electronAPI.removeAllListeners("open-settings");
+      }
+    };
   }, []);
 
   return (
     <div
-      ref={containerRef}
+      id="zara-desktop-overlay"
       style={{
-        width: "300px",
-        height: "500px",
-        background: "linear-gradient(180deg, #1a1a2e 0%, #16213e 100%)",
-        position: "relative",
-        cursor: "pointer",
-        overflow: "hidden",
+        position: "fixed", top: 0, left: 0,
+        width: "100vw", height: "100vh",
+        background: "transparent", overflow: "hidden",
+        pointerEvents: "none",
       }}
     >
-      <CharacterRenderer emotion={currentEmotion} />
-      <SubtitleBar />
+      <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+        {/* The Character (3D VRM) */}
+        <div style={{ pointerEvents: "auto" }}>
+          <VRMCharacter />
+        </div>
 
-      {/* Demo emotion buttons */}
-      <div
-        style={{
-          position: "absolute",
-          top: 10,
-          left: 10,
-          display: "flex",
-          gap: 4,
-          flexWrap: "wrap",
-          maxWidth: 100,
-        }}
-      >
-        {["happy", "angry", "sad", "shy", "neutral"].map((emo) => (
-          <button
-            key={emo}
-            onClick={() => useCharacterStore.getState().setEmotion(emo)}
+        {/* Chat Bubble above character */}
+        <ChatBubble />
+
+        {/* Emotion Indicator */}
+        <EmotionIndicator />
+
+        {/* Settings Panel */}
+        {showSettings && (
+          <div
             style={{
-              padding: "4px 8px",
-              fontSize: 10,
-              background:
-                currentEmotion === emo ? "#a78bfa" : "rgba(255,255,255,0.1)",
-              border: "none",
-              borderRadius: 4,
-              color: "#fff",
-              cursor: "pointer",
+              pointerEvents: "auto", position: "fixed",
+              top: "50%", left: "50%",
+              transform: "translate(-50%, -50%)", zIndex: 5000,
             }}
+            onMouseEnter={() => window.electronAPI?.setIgnoreMouse(false)}
+            onMouseLeave={() => window.electronAPI?.setIgnoreMouse(true)}
           >
-            {emo}
-          </button>
-        ))}
+            <SettingsPanel
+              isOpen={showSettings}
+              onClose={() => {
+                setShowSettings(false);
+                window.electronAPI?.setIgnoreMouse(true);
+              }}
+            />
+          </div>
+        )}
+
+        {/* API Key missing hint */}
+        {!geminiApiKey && (
+          <div
+            style={{
+              position: "fixed", bottom: taskbarHeight + 300,
+              left: "50%", transform: "translateX(-50%)",
+              padding: "8px 16px", background: "rgba(251, 191, 36, 0.9)",
+              borderRadius: "12px", color: "#000", fontSize: "12px",
+              fontWeight: 600, pointerEvents: "auto", cursor: "pointer",
+              zIndex: 4000, boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+            }}
+            onClick={() => setShowSettings(true)}
+            onMouseEnter={() => window.electronAPI?.setIgnoreMouse(false)}
+            onMouseLeave={() => window.electronAPI?.setIgnoreMouse(true)}
+          >
+            ⚠️ API Key লাগবে! Click করো →
+          </div>
+        )}
       </div>
     </div>
   );

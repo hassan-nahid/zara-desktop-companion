@@ -8,6 +8,8 @@ export const useConversationStore = create((set, get) => ({
   currentMessage: "",
   isTyping: false,
   isSpeaking: false,
+  showBubble: false,
+  bubbleTimeout: null,
 
   // Character info
   characterName: "Zara",
@@ -22,13 +24,38 @@ export const useConversationStore = create((set, get) => ({
     }));
   },
 
-  setCurrentMessage: (message) => set({ currentMessage: message }),
+  setCurrentMessage: (message) => {
+    // Clear previous bubble timeout
+    const state = get();
+    if (state.bubbleTimeout) {
+      clearTimeout(state.bubbleTimeout);
+    }
+
+    // Show bubble and auto-hide after 6 seconds
+    const timeout = setTimeout(() => {
+      set({ showBubble: false });
+    }, 6000);
+
+    set({
+      currentMessage: message,
+      showBubble: !!message,
+      bubbleTimeout: timeout,
+    });
+  },
+
+  hideBubble: () => {
+    const state = get();
+    if (state.bubbleTimeout) {
+      clearTimeout(state.bubbleTimeout);
+    }
+    set({ showBubble: false });
+  },
 
   setTyping: (isTyping) => set({ isTyping }),
 
   setSpeaking: (isSpeaking) => set({ isSpeaking }),
 
-  clearHistory: () => set({ messages: [], currentMessage: "" }),
+  clearHistory: () => set({ messages: [], currentMessage: "", showBubble: false }),
 
   getHistory: () => get().messages,
 }));
