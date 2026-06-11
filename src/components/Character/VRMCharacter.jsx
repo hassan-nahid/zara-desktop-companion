@@ -1,10 +1,14 @@
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useRef, useCallback, useState, useMemo } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin, VRMUtils } from "@pixiv/three-vrm";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { useCharacterStore, SPRITE_STATES } from "../../stores/characterStore";
 import { useMouseInteraction } from "../../hooks/useMouseInteraction";
 import { useRelationshipStore, MOODS } from "../../stores/relationshipStore";
+import { useSettingsStore } from "../../stores/settingsStore";
 
 const VRM_URL = "/models/avatar.vrm";
 
@@ -17,6 +21,7 @@ const EMOTION_EXPRESSIONS = {
   surprised: { happy: 0, angry: 0, sad: 0, surprised: 1 },
   excited: { happy: 0.9, angry: 0, sad: 0, relaxed: 0 },
   love: { happy: 0.7, angry: 0, sad: 0, relaxed: 0.5 },
+  sleeping: { happy: 0, angry: 0, sad: 0, relaxed: 0.8 },
 };
 
 const ARM_REST = {
@@ -25,6 +30,13 @@ const ARM_REST = {
   leftLowerArmZ: 0.08,
   rightLowerArmZ: -0.08,
 };
+
+const DANCE_POSES = [
+  { lUL: -0.5, rUL: -0.5, lLL: 0.3, rLL: 0.3, lUA_z: 0.5, rUA_z: -0.5, lUA_x: -0.3, rUA_x: -0.3, lLA_z: 0.3, rLA_z: -0.3 },
+  { lUL: -0.8, rUL: -0.8, lLL: 0.6, rLL: 0.6, lUA_z: 0.8, rUA_z: -0.8, lUA_x: -0.5, rUA_x: -0.5, lLA_z: 0.5, rLA_z: -0.5 },
+  { lUL: -0.3, rUL: -0.3, lLL: 0.5, rLL: 0.5, lUA_z: 1.0, rUA_z: -1.0, lUA_x: 0, rUA_x: 0, lLA_z: 0.1, rLA_z: -0.1 },
+  { lUL: -1.0, rUL: -1.0, lLL: 0.4, rLL: 0.4, lUA_z: 0.3, rUA_z: -0.3, lUA_x: -0.8, rUA_x: -0.8, lLA_z: 0.6, rLA_z: -0.6 },
+];
 
 const VRMCharacter = () => {
   const containerRef = useRef(null);
@@ -40,13 +52,29 @@ const VRMCharacter = () => {
   const emotionLerpRef = useRef({});
   const boneLerpRef = useRef({});
   const charRef = useRef(null);
+  const composerRef = useRef(null);
+  const danceTimerRef = useRef(0);
+  const currentDancePoseRef = useRef(0);
+  const sleepTimerRef = useRef(0);
+  const audioLevelRef = useRef(0);
 
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(null);
 
   const { x, y, width, height, currentSprite, isBeingDragged, isSitting } = useCharacterStore();
   const mood = useRelationshipStore((s) => s.mood);
+  const {
+    chibiMode,
+    bigScreenMode,
+    sleepMode,
+    danceMode,
+    postProcessing,
+  } = useSettingsStore();
   const { handleMouseEnter, handleMouseLeave, handleClick, handleMouseMove, handleDragStart } = useMouseInteraction();
+
+  // Dynamic dimensions
+  const charWidth = useMemo(() => chibiMode ? 100 : (bigScreenMode ? 400 : width), [chibiMode, bigScreenMode, width]);
+  const charHeight = useMemo(() => chibiMode ? 140 : (bigScreenMode ? 560 : height), [chibiMode, bigScreenMode, height]);
 
   const handleCharacterClick = useCallback((e) => {
     e.stopPropagation();
@@ -88,6 +116,19 @@ const VRMCharacter = () => {
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
+    // Post-processing composer
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    composerRef.current = composer;
+
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(container.clientWidth, container.clientHeight),
+      0.4, 0.3, 0.15
+    );
+    bloomPass.name = "bloom";
+    bloomPass.enabled = false;
+    composer.addPass(bloomPass);
+
     scene.add(new THREE.AmbientLight(0xffffff, 0.8));
     const kl = new THREE.DirectionalLight(0xfff5ee, 2.0);
     kl.position.set(3, 5, 5);
@@ -115,13 +156,11 @@ const VRMCharacter = () => {
         VRMUtils.removeUnnecessaryVertices(gltf.scene);
         VRMUtils.removeUnnecessaryJoints(gltf.scene);
 
-        // Use a PARENT GROUP for rotation so vrm.update() can't override it
         const group = new THREE.Group();
-        group.rotation.y = Math.PI; // flip to face camera
+        group.rotation.y = Math.PI;
         group.add(vrm.scene);
         parentGroupRef.current = group;
 
-        // Auto-frame
         const box = new THREE.Box3().setFromObject(vrm.scene);
         const size = box.getSize(new THREE.Vector3());
         vrm.scene.position.y = -box.min.y;
@@ -150,6 +189,7 @@ const VRMCharacter = () => {
       camera.aspect = container.clientWidth / container.clientHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(container.clientWidth, container.clientHeight);
+      composer.setSize(container.clientWidth, container.clientHeight);
     };
     window.addEventListener("resize", onResize);
 
@@ -161,6 +201,23 @@ const VRMCharacter = () => {
     };
   }, []);
 
+  // ===== Toggle post-processing =====
+  useEffect(() => {
+    if (!composerRef.current) return;
+    composerRef.current.passes.forEach((p) => {
+      if (p.name === "bloom") p.enabled = postProcessing;
+    });
+  }, [postProcessing]);
+
+  // ===== Listen for audio level from dance hook =====
+  useEffect(() => {
+    const handleAudio = (e) => {
+      audioLevelRef.current = e.detail.level || 0;
+    };
+    window.addEventListener("zara-audio-level", handleAudio);
+    return () => window.removeEventListener("zara-audio-level", handleAudio);
+  }, []);
+
   // ===== Animation loop =====
   useEffect(() => {
     if (!rendererRef.current || !sceneRef.current || !cameraRef.current) return;
@@ -170,14 +227,28 @@ const VRMCharacter = () => {
       const delta = clockRef.current.getDelta();
       const elapsed = clockRef.current.getElapsedTime();
       const vrm = vrmRef.current;
+      const settings = useSettingsStore.getState();
 
-      if (!vrm) { rendererRef.current.render(sceneRef.current, cameraRef.current); return; }
+      if (!vrm) {
+        if (composerRef.current) {
+          composerRef.current.render();
+        } else {
+          rendererRef.current.render(sceneRef.current, cameraRef.current);
+        }
+        return;
+      }
 
       const state = useCharacterStore.getState();
 
       // ---- Facial expressions ----
       if (vrm.expressionManager) {
         let emo = state.currentEmotion || "neutral";
+
+        if (settings.sleepMode && state.isSitting && state.currentBehavior === "sitting") {
+          const relStore = useRelationshipStore.getState();
+          if (relStore.ignoreMinutes >= 5) emo = "sleeping";
+        }
+
         if (state.currentSprite === SPRITE_STATES.ANGRY) emo = "angry";
         else if (state.currentSprite === SPRITE_STATES.HAPPY) emo = "happy";
         else if (state.currentSprite === SPRITE_STATES.SAD) emo = "sad";
@@ -191,7 +262,6 @@ const VRMCharacter = () => {
           try { vrm.expressionManager.setValue(name, emotionLerpRef.current[name]); } catch {}
         }
 
-        // Blink
         blinkTimerRef.current += delta;
         if (blinkTimerRef.current >= nextBlinkRef.current) {
           blinkTimerRef.current = 0;
@@ -206,8 +276,13 @@ const VRMCharacter = () => {
       // ---- Breathing ----
       if (vrm.scene) {
         if (vrm.scene.userData._baseY === undefined) vrm.scene.userData._baseY = vrm.scene.position.y;
-        vrm.scene.position.y = vrm.scene.userData._baseY + Math.sin(elapsed * 1.8) * 0.005;
+        const breatheAmplitude = settings.bigScreenMode ? 0.008 : (settings.chibiMode ? 0.003 : 0.005);
+        const breatheSpeed = settings.sleepMode ? 1.2 : 1.8;
+        vrm.scene.position.y = vrm.scene.userData._baseY + Math.sin(elapsed * breatheSpeed) * breatheAmplitude;
       }
+
+      // ---- Dance animation ----
+      const isDancing = settings.danceMode && audioLevelRef.current > 0.08;
 
       // ---- Bone poses ----
       if (vrm.humanoid) {
@@ -218,7 +293,42 @@ const VRMCharacter = () => {
         const lLA = gb("leftLowerArm"), rLA = gb("rightLowerArm");
         const spine = gb("spine"), head = gb("head");
 
-        if (state.isSitting) {
+        if (isDancing) {
+          // Dance animation driven by audio
+          danceTimerRef.current += delta;
+          const beatSpeed = 4 + audioLevelRef.current * 8;
+          const beat = Math.sin(danceTimerRef.current * beatSpeed);
+
+          const react = audioLevelRef.current * settings.danceReactivity * 2;
+
+          if (lUL) lUL.rotation.x = lerpBone("lUL_x", -0.5 + beat * 0.3 * react, delta, 8);
+          if (rUL) rUL.rotation.x = lerpBone("rUL_x", -0.5 - beat * 0.3 * react, delta, 8);
+          if (lLL) lLL.rotation.x = lerpBone("lLL_x", 0.3 + Math.sin(elapsed * beatSpeed) * 0.2 * react, delta, 8);
+          if (rLL) rLL.rotation.x = lerpBone("rLL_x", 0.3 + Math.cos(elapsed * beatSpeed) * 0.2 * react, delta, 8);
+          if (lUA) {
+            lUA.rotation.z = lerpBone("lUA_z", 0.5 + beat * 0.3 * react, delta, 8);
+            lUA.rotation.x = lerpBone("lUA_x", -0.3 - Math.abs(beat) * 0.3 * react, delta, 8);
+          }
+          if (rUA) {
+            rUA.rotation.z = lerpBone("rUA_z", -0.5 - beat * 0.3 * react, delta, 8);
+            rUA.rotation.x = lerpBone("rUA_x", -0.3 - Math.abs(beat) * 0.3 * react, delta, 8);
+          }
+          if (lLA) lLA.rotation.z = lerpBone("lLA_z", 0.3 + beat * 0.2 * react, delta, 8);
+          if (rLA) rLA.rotation.z = lerpBone("rLA_z", -0.3 - beat * 0.2 * react, delta, 8);
+          if (spine) spine.rotation.z = lerpBone("spine_z", beat * 0.05 * react, delta, 6);
+          if (head) {
+            head.rotation.y = lerpBone("head_y", beat * 0.08 * react, delta, 5);
+            head.rotation.x = lerpBone("head_x", Math.sin(elapsed * 0.5) * 0.04, delta, 3);
+          }
+
+          // Body bounce
+          if (vrm.scene) {
+            const bounce = Math.abs(beat) * 0.01 * react;
+            vrm.scene.position.y = vrm.scene.userData._baseY + bounce;
+          }
+        } else if (state.isSitting) {
+          danceTimerRef.current = 0;
+
           // Sitting with dangling legs
           const dangle = Math.sin(elapsed * 1.5) * 0.15;
           if (lUL) lUL.rotation.x = lerpBone("lUL_x", -1.5, delta, 4);
@@ -232,7 +342,9 @@ const VRMCharacter = () => {
           if (spine) spine.rotation.z = lerpBone("spine_z", 0, delta, 4);
           if (head) { head.rotation.x = lerpBone("head_x", Math.sin(elapsed * 0.4) * 0.04, delta, 3); head.rotation.y = lerpBone("head_y", Math.sin(elapsed * 0.3) * 0.06, delta, 3); }
         } else {
-          // Idle — standing with arms at sides
+          danceTimerRef.current = 0;
+
+          // Idle standing
           if (lUL) lUL.rotation.x = lerpBone("lUL_x", 0, delta, 5);
           if (rUL) rUL.rotation.x = lerpBone("rUL_x", 0, delta, 5);
           if (lLL) lLL.rotation.x = lerpBone("lLL_x", 0, delta, 5);
@@ -247,7 +359,12 @@ const VRMCharacter = () => {
       }
 
       vrm.update(delta);
-      rendererRef.current.render(sceneRef.current, cameraRef.current);
+
+      if (composerRef.current && settings.postProcessing) {
+        composerRef.current.render();
+      } else {
+        rendererRef.current.render(sceneRef.current, cameraRef.current);
+      }
     };
 
     animate();
@@ -267,10 +384,12 @@ const VRMCharacter = () => {
       onMouseDown={handleDragStart} onClick={handleCharacterClick} onMouseMove={handleCharMouseMove}
       style={{
         position: "absolute", left: `${x}px`, top: `${y}px`,
-        width: `${width}px`, height: `${height}px`,
+        width: `${charWidth}px`, height: `${charHeight}px`,
         cursor: isBeingDragged ? "grabbing" : "pointer", zIndex: 1000,
-        transition: isBeingDragged ? "none" : "top 0.3s ease",
+        transition: isBeingDragged ? "none" : "top 0.3s ease, width 0.5s ease, height 0.5s ease",
         userSelect: "none", WebkitUserSelect: "none",
+        transform: bigScreenMode ? "scale(1.8)" : (chibiMode ? "scale(0.45)" : "scale(1)"),
+        transformOrigin: "bottom center",
       }}>
       <div ref={containerRef} style={{
         width: "100%", height: "100%", pointerEvents: "none",

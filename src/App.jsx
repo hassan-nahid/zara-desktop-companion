@@ -3,6 +3,10 @@ import VRMCharacter from "./components/Character/VRMCharacter";
 import ChatBubble from "./components/ChatBubble/ChatBubble";
 import EmotionIndicator from "./components/UI/EmotionIndicator";
 import SettingsPanel from "./components/UI/SettingsPanel";
+import ReminderPoints from "./components/UI/ReminderPoints";
+import { useReminderSystem } from "./hooks/useReminderSystem";
+import { useDanceToMusic } from "./hooks/useDanceToMusic";
+import { useSleepMode } from "./hooks/useSleepMode";
 import { useCharacterStore } from "./stores/characterStore";
 import { useRelationshipStore } from "./stores/relationshipStore";
 import { useConversationStore } from "./stores/conversationStore";
@@ -15,9 +19,23 @@ import { useAI } from "./hooks/useAI";
 const App = () => {
   const [showSettings, setShowSettings] = useState(false);
 
-  const { geminiApiKey, loadApiKey } = useSettingsStore();
+  const { geminiApiKey, loadApiKey, loadSettings } = useSettingsStore();
   const { initProvider } = useAI();
   const { screenWidth, groundY, taskbarHeight } = useScreenInfo();
+
+  // Reminder system (eye exercise)
+  const {
+    reminderActive,
+    points,
+    startReminder,
+    completeReminder,
+  } = useReminderSystem();
+
+  // Dance to Music
+  useDanceToMusic();
+
+  // Sleep Mode
+  useSleepMode();
 
   // Initialize desktop behavior (idle, sitting)
   useDesktopBehavior(screenWidth, groundY, taskbarHeight);
@@ -25,8 +43,11 @@ const App = () => {
   // Initialize auto-talk
   useAutoTalk();
 
-  // Load API key on mount
-  useEffect(() => { loadApiKey(); }, []);
+  // Load settings on mount
+  useEffect(() => {
+    loadApiKey();
+    loadSettings();
+  }, []);
 
   // Initialize AI when API key is available
   useEffect(() => {
@@ -51,6 +72,32 @@ const App = () => {
     };
   }, []);
 
+  // Listen for manual reminder trigger from settings
+  useEffect(() => {
+    const handleTrigger = () => startReminder();
+    window.addEventListener("zara-trigger-reminder", handleTrigger);
+    return () => window.removeEventListener("zara-trigger-reminder", handleTrigger);
+  }, [startReminder]);
+
+  // Listen for tray toggle events
+  useEffect(() => {
+    if (!window.electronAPI) return;
+    window.electronAPI.onToggleChibi((val) => {
+      useSettingsStore.getState().setChibiMode(val);
+    });
+    window.electronAPI.onToggleDance((val) => {
+      useSettingsStore.getState().setDanceMode(val);
+    });
+    window.electronAPI.onToggleSleep((val) => {
+      useSettingsStore.getState().setSleepMode(val);
+    });
+    return () => {
+      window.electronAPI.removeAllListeners("toggle-chibi");
+      window.electronAPI.removeAllListeners("toggle-dance");
+      window.electronAPI.removeAllListeners("toggle-sleep");
+    };
+  }, []);
+
   return (
     <div
       id="zara-desktop-overlay"
@@ -72,6 +119,13 @@ const App = () => {
 
         {/* Emotion Indicator */}
         <EmotionIndicator />
+
+        {/* Reminder Points (eye exercise overlay) */}
+        <ReminderPoints
+          active={reminderActive}
+          points={points}
+          onComplete={completeReminder}
+        />
 
         {/* Settings Panel */}
         {showSettings && (

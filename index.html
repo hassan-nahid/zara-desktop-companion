@@ -143,6 +143,42 @@
         background: rgba(167, 139, 250, 0.5);
       }
 
+      /* ===== Reminder Point Pulse ===== */
+      @keyframes reminderPulse {
+        0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.8; }
+        50% { transform: translate(-50%, -50%) scale(1.3); opacity: 1; }
+      }
+
+      @keyframes ringExpand {
+        0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0.6; }
+        100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
+      }
+
+      /* ===== Dance Glow ===== */
+      @keyframes danceGlow {
+        0%, 100% { filter: drop-shadow(0 0 5px rgba(244,114,182,0.3)); }
+        50% { filter: drop-shadow(0 0 20px rgba(244,114,182,0.8)); }
+      }
+
+      /* ===== Sleep ZZZ ===== */
+      @keyframes floatZZZ {
+        0% { transform: translateY(0) scale(0.8); opacity: 0; }
+        30% { opacity: 1; }
+        100% { transform: translateY(-30px) scale(1.2); opacity: 0; }
+      }
+
+      /* ===== Big Screen Mode ===== */
+      @keyframes bigScreenIn {
+        from { transform: scale(0.5); opacity: 0; }
+        to { transform: scale(1.8); opacity: 1; }
+      }
+
+      /* ===== Chibi Bounce ===== */
+      @keyframes chibiBounce {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-6px); }
+      }
+
       /* Input styling */
       input:focus, select:focus {
         border-color: #a78bfa !important;

@@ -64,7 +64,6 @@ const createWindow = () => {
 const createTray = () => {
   // Create a simple tray icon
   const iconSize = 16;
-  const icon = nativeImage.createEmpty();
   
   // Create a simple colored icon programmatically
   const canvas = Buffer.alloc(iconSize * iconSize * 4);
@@ -77,11 +76,11 @@ const createTray = () => {
   const trayIcon = nativeImage.createFromBuffer(canvas, { width: iconSize, height: iconSize });
   
   tray = new Tray(trayIcon);
-  tray.setToolTip("Zara - Desktop Companion");
+  tray.setToolTip("Zara - AI Desktop Companion");
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: "🎀 Zara",
+      label: "🎀 Zara v1.0",
       enabled: false,
     },
     { type: "separator" },
@@ -104,7 +103,33 @@ const createTray = () => {
     {
       label: "Settings",
       click: () => {
+        mainWindow.show();
         mainWindow.webContents.send("open-settings");
+      },
+    },
+    { type: "separator" },
+    {
+      label: "Chibi Mode",
+      type: "checkbox",
+      checked: false,
+      click: (menuItem) => {
+        mainWindow.webContents.send("toggle-chibi", menuItem.checked);
+      },
+    },
+    {
+      label: "Dance Mode",
+      type: "checkbox",
+      checked: false,
+      click: (menuItem) => {
+        mainWindow.webContents.send("toggle-dance", menuItem.checked);
+      },
+    },
+    {
+      label: "Sleep Mode",
+      type: "checkbox",
+      checked: false,
+      click: (menuItem) => {
+        mainWindow.webContents.send("toggle-sleep", menuItem.checked);
       },
     },
     { type: "separator" },
@@ -134,6 +159,31 @@ const createTray = () => {
     }
   });
 };
+
+// Auto-start support
+const handleAutoStart = (enable) => {
+  if (process.platform === "win32") {
+    app.setLoginItemSettings({
+      openAtLogin: enable,
+      path: app.getPath("exe"),
+    });
+  } else {
+    app.setLoginItemSettings({
+      openAtLogin: enable,
+    });
+  }
+};
+
+ipcMain.on("set-auto-start", (event, enable) => {
+  handleAutoStart(enable);
+});
+
+ipcMain.handle("get-auto-start", () => {
+  if (process.platform === "win32") {
+    return app.getLoginItemSettings().openAtLogin;
+  }
+  return false;
+});
 
 app.whenReady().then(() => {
   createWindow();
